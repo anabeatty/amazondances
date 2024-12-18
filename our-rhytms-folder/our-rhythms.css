@@ -1,0 +1,116 @@
+body {
+  background-color: #db9a8f;
+  font: georgia;
+
+  h1,
+  h2 {
+    color: #672a37;
+  }
+  h3 {
+    color: #716f35;
+  }
+}
+
+/* ----------------------MENU--------------------- */
+
+/* Top navigation color */
+.vertical-menu {
+  background-color: #be8075;
+  overflow: hidden;
+}
+
+/* Style the links inside the navigation bar */
+.vertical-menu a {
+  float: left;
+  color: #f2e9e1;
+  text-align: center;
+  padding: 14px 16px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+/* Change the color of links on hover */
+.vertical-menu a:hover {
+  background-color: #f2e9e1;
+  color: #672a37;
+}
+
+/* Add a color to the active/current link */
+.vertical-menu a.active {
+  background-color: #672a37;
+  color: #f2e9e1;
+}
+
+/* ----------------------SQUARES--------------------- */
+
+.general-history-square {
+  display: inline-block;
+  background-color: #eccc6e;
+  width: 300px;
+  height: 700px;
+  border-radius: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.general-history-square a {
+  color: #814256;
+  text-align: center;
+  line-height: 700px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.carimbo-square {
+  display: inline-block;
+  background-color: #814256;
+  width: 300px;
+  height: 700px;
+  border-radius: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.carimbo-square a {
+  color: #f2e9e1;
+  text-align: center;
+  line-height: 700px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.boi-bumba-square {
+  display: inline-block;
+  background-color: #716f35;
+  width: 300px;
+  height: 700px;
+  border-radius: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.boi-bumba-square a {
+  color: #f2e9e1;
+  text-align: center;
+  line-height: 700px;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.brega-square {
+  display: inline-block;
+  background-color: #f2e9e1;
+  width: 300px;
+  height: 700px;
+  border-radius: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.brega-square a {
+  color: #814256;
+  text-align: center;
+  line-height: 700px;
+  text-decoration: none;
+  font-size: 17px;
+}
