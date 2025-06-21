@@ -7,7 +7,6 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:qualquercoisa@localhost:5432/ad_db"
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-
 #____________________________________________________________________________________________________
 
 # Creating classes
@@ -28,7 +27,6 @@ class pagesClass(db.Model):
     category = db.relationship('categoriesClass', back_populates='pages')
     collaboratorId = db.Column(db.Integer, ForeignKey('collaborator.collaboratorId'))
     collaborator = db.relationship('collaboratorsClass', back_populates='pages')
-
 
 class rolesClass(db.Model):
     __tablename__ = 'roles'
@@ -54,7 +52,54 @@ class collaboratorsClass(db.Model):
 @app.route('/')
 def hello():
     return {"hello":"socorro"}
+#____________________________________________________________________________________________________
 
+#Categories CRUD
+# Get all categories
+@app.route('/categories', methods=["GET"])
+def getCategoriesFunction():
+    categories = categoriesClass.query.all()
+
+    categoriesList = []
+    for category in categories:
+        categoriesList.append({
+            "category_id": category.categoryId,
+            "category_name": category.categoryName
+            })
+    return jsonify(categoriesList), 200
+
+# Create a category
+@app.route('/categories', methods=["POST"])
+def addNewCategoryFunction():
+    data = request.get_json()
+    newCategory = categoriesClass(
+        categoryName=data['category_name']
+    )
+
+    db.session.add(newCategory)
+    db.session.commit()
+
+    newCategory_data = {
+        "category_id": newCategory.categoryId,
+        "category_name": newCategory.categoryName
+    }
+
+    return jsonify(newCategory_data), 200
+
+
+# Get a specific category 
+@app.route('/categories/<int:categoryId>', methods=["GET"])
+def getCategoryByIdFunction(categoryId: int):
+    category = categoriesClass.query.get_or_404(categoryId)
+
+    category_data = {
+        "category_id": category.categoryId,
+        "category_name": category.categoryName
+    }
+
+    return jsonify(category_data), 200
+
+# "Category" doesn't have a "delete" option
 #____________________________________________________________________________________________________
 
 #Pages CRUD
@@ -80,7 +125,7 @@ def getPagesFunction():
         })
     return jsonify(pagesList), 200
 
-# # Create a new page
+# Create a new page
 @app.route('/pages/', methods=["POST"])
 def addPageFunction():
     data = request.get_json()
@@ -109,7 +154,7 @@ def addPageFunction():
         }
     }), 201
 
-# #Get one page by ID
+# Get one page by ID
 @app.route('/pages/<int:pageId>', methods=["GET"])
 def getPageByIdFunction(pageId: int):
     page = pagesClass.query.get_or_404(pageId)
@@ -130,7 +175,7 @@ def getPageByIdFunction(pageId: int):
 
     return jsonify(page_data), 200
 
-# #Update page
+# Update page
 @app.route('/pages/<int:pageId>', methods=["PUT"])
 def updatePageFunction(pageId: int):
     page = pagesClass.query.get(pageId)
@@ -159,7 +204,7 @@ def updatePageFunction(pageId: int):
         }
     }), 201
 
-# #Delete a specific page
+# Delete a specific page
 @app.route('/page/<int:pageId>', methods=["DELETE"])
 def deletePageFunction(pageId: int):    
     page = pagesClass.query.get(pageId)
@@ -170,59 +215,89 @@ def deletePageFunction(pageId: int):
     return jsonify({
         "message": "Page deleted"
     }), 200
+#____________________________________________________________________________________________________
 
-# #____________________________________________________________________________________________________
+#Roles CRUD
+# Get all roles
+@app.route('/roles', methods=["GET"])
+def getRolesFunction():
+    roles = rolesClass.query.all()
 
-#Categories CRUD
-#Get all categories
-@app.route('/categories', methods=["GET"])
-def getCategoriesFunction():
-    categories = categoriesClass.query.all()
+    rolesList=[]
+    for role in roles:
+        rolesList.append({
+            "role_id": role.roleId,
+            "role_name": role.roleName,
+            "collaborators_list": role.collaborators
+        })
+    return jsonify(rolesList),200
 
-    categoriesList = []
-    for category in categories:
-        categoriesList.append({
-            "category_id": category.categoryId,
-            "category_name": category.categoryName
-            })
-    return jsonify(categoriesList), 200
-
-#Create a category
-@app.route('/categories', methods=["POST"])
-def addNewCategoryFunction():
+# Create a new role
+@app.route('/roles/', methods=["POST"])
+def addNewRoleFunction():
     data = request.get_json()
-    newCategory = categoriesClass(
-        categoryName=data['category_name']
+    newRole = rolesClass(
+        roleName=data['role_name'],
     )
-
-    db.session.add(newCategory)
+    db.session.add(newRole)
     db.session.commit()
 
-    newCategory_data = {
-        "category_id": newCategory.categoryId,
-        "category_name": newCategory.categoryName
+    return jsonify({
+        "message": "Role added",
+        "role": {
+            "role_id": newRole.roleId,
+            "role_name": newRole.roleName
+        }
+    }), 201
+
+# Get one role by ID
+@app.route('/roles/<int:roleId>', methods=["GET"])
+def getRoleByIdFunction(roleId: int):
+    role = rolesClass.query.get_or_404(roleId)
+
+    role_data = {
+        "role_id": role.roleId,
+        "role_name": role.roleName,
+        "collaborators_list": role.collaborators
     }
+    return jsonify(role_data), 200
 
-    return jsonify(newCategory_data), 200
+# Update role
+@app.route('/roles/<int:roleId>', methods=["PUT"])
+def updateRoleFunction(roleId: int):
+    role = rolesClass.query.get(roleId)
+    data = request.get_json()
 
+    role.roleName = data['role_name']
+    role.roleId = data['role_id']
+    role.collaborators = data['collaborators']
 
-# #Get a specific category 
-@app.route('/categories/<int:categoryId>', methods=["GET"])
-def getCategoryByIdFunction(categoryId: int):
-    category = categoriesClass.query.get_or_404(categoryId)
+    db.session.commit()
 
-    category_data = {
-        "category_id": category.categoryId,
-        "category_name": category.categoryName
-    }
+    return jsonify({
+        "message": "Role updated",
+        "role":{
+            "role_id": role.roleId,
+            "role_name": role.rolename,
+            "collaborators": role.collaborators
+        }
+    }), 201
 
-    return jsonify(category_data), 200
+# Delete a specific role
+@app.route('/role/<int:roleId>', methods=["DELETE"])
+def deleteRoleFunction(roleId: int):
+    role = rolesClass.query.get(roleId)
 
-# #____________________________________________________________________________________________________
+    db.session.delete(role)
+    db.session.commit()
 
+    return jsonify({
+        "message": "Role deleted"
+    }), 200
+#____________________________________________________________________________________________________
 
-# #Collaborators CRUD
-#Get all collaborators users
+#Collaborators CRUD
+# Get all collaborators users
 @app.route('/collaborators', methods=["GET"])
 def getCollaboratorsFunction():
     collaborators = collaboratorsClass.query.all()
@@ -233,12 +308,14 @@ def getCollaboratorsFunction():
             "collaborator_id": collaborator.collaboratorId,
             "collaborator_name": collaborator.collaboratorName,
             "collaborator_email": collaborator.collaboratorEmail,
-            # "collaborator_categories": collaborator.collaboratorCategories
+            "collaborator_pages": collaborator.pages,
+            "collaborator_role_id": collaborator.roleId,
+            "collaborator_role": collaborator.role
         })
     
     return jsonify(collaboratorsList), 200
 
-#Get a specific collaborator 
+# Get a specific collaborator 
 @app.route('/collaborators/<int:collaboratorId>', methods=["GET"])
 def getCollaboratorById(collaboratorId: int):
     collaborator = collaboratorsClass.query.get_or_404(collaboratorId)
@@ -247,17 +324,22 @@ def getCollaboratorById(collaboratorId: int):
         "collaborator_id": collaborator.collaboratorId,
         "collaborator_name": collaborator.collaboratorName,
         "collaborator_email": collaborator.collaboratorEmail,
+        "collaborator_role": {
+            "collaborator_role_id": collaborator.role.roleId,
+            "collaborator_role_name": collaborator.role.roleName
+        }
     }
 
     return jsonify(collaborator_data), 200
 
-#Create a new collaborator user
+# Create a new collaborator user
 @app.route('/collaborators', methods=["POST"])
 def addCollaborator():
     data = request.get_json()
     newCollaborator = collaboratorsClass(
         collaboratorName=data['collaborator_name'],
         collaboratorEmail=data['collaborator_email'],
+        roleId=data['collaborator_role_id']
     )
     db.session.add(newCollaborator)
     db.session.commit()
@@ -268,11 +350,15 @@ def addCollaborator():
             "collaborator_id": newCollaborator.collaboratorId,
             "collaborator_name": newCollaborator.collaboratorName,
             "collaborator_email": newCollaborator.collaboratorEmail,
+            "collaborator_role": {
+                "collaborator_role_id": newCollaborator.role.roleId,
+                "collaborator_role_name": newCollaborator.role.roleName
+            }
         }
     }), 201
 
 
-#Update collaborator
+# Update collaborator
 @app.route('/collaborators/<int:collaboratorId>', methods=["PUT"])
 def updateCollaborator(collaboratorId: int):
     collaborator = collaboratorsClass.query.get(collaboratorId)
@@ -281,13 +367,8 @@ def updateCollaborator(collaboratorId: int):
     collaborator.collaboratorId=data['collaborator_id']
     collaborator.collaboratorName=data['collaborator_name']
     collaborator.collaboratorEmail=data['collaborator_email']
+    collaborator.roleId=data['collaborator_role_id']
 
-    updatedCollaborator = collaboratorsClass(
-        collaboratorId=data['collaborator_id'],
-        collaboratorName=data['collaborator_name'],
-        collaboratorEmail=data['collaborator_email'],
-    )
-    db.session.add(updatedCollaborator)
     db.session.commit()
 
     return jsonify({
@@ -296,10 +377,14 @@ def updateCollaborator(collaboratorId: int):
             "collaborator_id": collaborator.collaboratorId,
             "collaborator_name": collaborator.collaboratorName,
             "collaborator_email": collaborator.collaboratorEmail,
+            "collaborator_role": {
+                "collaborator_role_id": collaborator.roleId,
+                "collaborator_role_name": collaborator.role
+            }
         }
     }), 201
 
-#Delete collaborator
+# Delete collaborator
 @app.route('/collaborators/<int:collaboratorId>', methods=["DELETE"])
 def deleteCollaborator(collaboratorId):
     collaborator = collaboratorsClass.query.get(collaboratorId)
@@ -309,160 +394,28 @@ def deleteCollaborator(collaboratorId):
     return jsonify ({
         "message": "User deleted"
     }), 200
-
 #____________________________________________________________________________________________________
 
+#Relationships routes
+# Pages and categories 
 
+#  Get all pages from a specific category
+@app.route('/categories/<int:categoryId>/pages', methods=["GET"])
+def getPagesByCategory(categoryId: int):
+    category = categoriesClass.query.get(categoryId)
+    pages_data = []
+    for page in category.pages:
+        pages_data.append({
+            "page_id": page.pageId,
+            "page_name": page.pageName,
+            "page_collaborator": {
+                "collaborator_id": page.collaborator.collaboratorId,
+                "collaborator_name": page.collaborator.collaboratorName,
+                "collaborator_email": page.collaborator.collaboratorEmail
+            }
+        })
 
-
-
-
-
-
-
-
-#____________________________________________________________________________________________________
-# #Admin CRUD
-# #Get all admins users
-# @app.route('/admins', methods=["GET"])
-# def getAllAdmins():
-#     admins = adminsClass.query.all()
-#     adminsList = []
-#     for admin in admins:
-#         adminsList.append({
-#             "admin_id": admin.adminId,
-#             "admin_name": admin.adminName,
-#             "admin_email": admin.adminEmail,
-#             # "admin_categories": admin.adminCategories
-#         })
-#     return jsonify(adminsList), 200 
-
-# #Get a specific admin user
-# @app.route('/admins/<int:adminId>', methods=["GET"])
-# def getAdminById(adminId: int):
-#     admin = adminsClass.query.get_or_404(adminId)
-#     admin_data = {
-#         "admin_id": admin.adminId,
-#         "admin_name": admin.adminName,
-#         "admin_email": admin.adminEmail,
-#         # "admin_categories": admin.adminCategories
-#     }
-
-#     return jsonify(admin_data), 200
-
-# #Crete a new admin user
-# @app.route('/admins', methods=["POST"])
-# def addAdmin():
-#     data = request.get_json()
-#     newAdmin = adminsClass(
-#         adminName=data['admin_name'],
-#         adminEmail=data['admin_email'],
-#         # adminCategories=data['admin_categories']
-#     )
-#     db.session.add(newAdmin)
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": "Admin user added",
-#         "Admin": {
-#             "admin_id": newAdmin.adminId,
-#             "admin_name": newAdmin.adminName,
-#             "admin_email": newAdmin.adminEmail,
-#             # "admin_categories": newAdmin.adminCategories
-#         }
-#     }), 201
-
-# #Update a admin details
-# @app.route('/admin/<int:admindId>', methods= ["PUT"])
-# def updateAdmin(adminId: int):
-#     admin = adminsClass.query(adminId)
-#     data = request.get_json()
-#     updatedAdmin = adminsClass(
-#         adminId=data['admin_id'],
-#         adminName=data['admin_name'],
-#         adminEmail=data['admin_email'],
-#         adminCategories=data['admin_categories']
-#     )
-#     db.session.add(updatedAdmin)
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": "Admin added",
-#         "admin": {
-#             "admin_id": updatedAdmin.adminId,
-#             "admin_name": updatedAdmin.adminName,
-#             "admin_email": updatedAdmin.adminEmail,
-#             "admin_categories": updatedAdmin.adminCategories
-#         }
-#     }), 201
-
-# #Delete a admin user
-# @app.route('/admin/<int:admindId>', methods= ["DELETE"])
-# def deleteAdmin(amindId: int):
-#     admin = adminsClass.query.get(adminId)
-#     db.session.delete(admin)
-#     db.session.commit()
-
-#     return jsonify({
-#         "message": "Admin user deleted"
-#     }), 200
-
-# #____________________________________________________________________________________________________
-
-# #Relationships routes
-# #Pages and categories ESSE TRECO NAO TA FAZENDO NENHUM SENTIDO VSF
-# #Get all pages from a specific category
-# @app.route('/categories/<int:categoryId>/pages', methods=["GET"])
-# def getPagesByCategory(categoryId: int):
-#     category = categoriesClass.query.get(categoryId)
-#     pages_data = []
-#     for page in category.pages:
-#         pages_data.append({
-#             "page_id": page.pageId,
-#             "page_name": page.pageName,
-#             "page_collaborator": page.pageCollaborator
-#         })
-
-#     return jsonify(pages_data), 200
-
-# #Assign a page to a specific category
-# @app.route('/categories/<int:categoryId>/pages/<int:pageId>', methods=["POST"])
-# def assignPageToCategory(categoryId: int, pageId: int):
-#     category = categoriesClass.query.get(categoryId)
-#     page = pagesClass.query.get(pageId)
-#     category.pages.append(page) 
-#     db.session.add(category)
-#     db.session.coomit()
-
-#     return jsonify({
-#         "message": "Category updated"
-#     }), 201
-
-#Remove a page form a specific category
-#@app.route('/categories/<int:categoryId>/pages/<int:pageId>', methods=["POST"])
-#def assignPageToCategory(categoryId: int, pageId: int):
-#    category = categoriesClass.query.get(categoryId)
-#   page = pagesClass.query.get(pageId)
-#   category.pages.append(page) 
-#   db.session.add(category)
-#   db.session.coomit()
-
-#   return jsonify({
-#       "message": "Category updated"
-#   }), 200
-
-    
-
-
-##########
-
-
-# def __init__(self, category_id, category_name):
-#     self.categoryId = category_id
-#     self.categoryName = category_name
-
-# def __repr__(self):
-#     return f"<Category {self.categoryName}>"
+    return jsonify(pages_data), 200
 
 #____________________________________________________________________________________________________
 
