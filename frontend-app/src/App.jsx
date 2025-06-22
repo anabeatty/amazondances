@@ -45,7 +45,7 @@ const App = () => {
         { id: 1, title: 'General History', content: '<h2>General History</h2><p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. This is the history of our dance group...</p>', category_id: 1 },
         { id: 2, title: 'Carimbó', content: '<h2>Carimbó</h2><p>Carimbó is a traditional dance from Northern Brazil...</p>', category_id: 1 },
         { id: 3, title: 'Beginner Classes', content: '<h2>Beginner Classes</h2><p>Join our beginner-friendly classes every Tuesday and Thursday...</p>', category_id: 2 },
-        { id: 4, title: 'Recent Performances', content: '<h2>Recent Performances</h2><p>Check out our latest performances and upcoming events...</p>', category_id: 3 }
+        { id: 4, title: 'Recent Performance', content: '<h2>Recent performance</h2><p>Check out our latest performances and upcoming events...</p>', category_id: 3 }
       ]);
     }
   };
@@ -153,7 +153,7 @@ const App = () => {
 
   // Delete page
   const handleDeletePage = async (pageId) => {
-    if (window.confirm('Are you sure you want to delete this page?')) return;
+    if (!confirm('Are you sure you want to delete this page?')) return;
     
     try {
       const response = await fetch(`${API_BASE}/pages/${pageId}`, {
@@ -337,7 +337,7 @@ const App = () => {
         )}
       </div>
 
-      {/* Add Category Modal */}
+      {/* Add Category */}
       {showAddCategory && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -367,7 +367,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Add Page Modal */}
+      {/* Add Page*/}
       {showAddPage && (
         <div className="modal-overlay">
           <div className="modal-content">

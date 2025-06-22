@@ -1,423 +1,280 @@
-from flask import Flask, request, jsonify
-from flask_sqlalchemy import SQLAlchemy 
-from flask_migrate import Migrate
-from sqlalchemy import ForeignKey
+import os
+from flask import Flask, jsonify, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from werkzeug.security import generate_password_hash, check_password_hash
+import enum
+
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = "postgresql://postgres:qualquercoisa@localhost:5432/ad_db"
+
+db_user = os.environ.get('DB_USER', 'postgres')
+db_password = os.environ.get('DB_PASSWORD', 'qualquercoisa')
+db_host = os.environ.get('DB_HOST', 'localhost')
+db_port = os.environ.get('DB_PORT', '5432')
+db_name = os.environ.get('DB_NAME', 'ad_db')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', '1234')
+
+# Initialize SQLAlchemy
 db = SQLAlchemy(app)
-migrate = Migrate(app, db)
-#____________________________________________________________________________________________________
-
-# Creating classes
-class categoriesClass(db.Model):
-    __tablename__ = 'categories'
-
-    categoryId = db.Column(db.Integer, primary_key=True)
-    categoryName = db.Column(db.String(), nullable=False)
-    pages = db.relationship('pagesClass', back_populates='category')
+CORS(app)
 
 
-class pagesClass(db.Model):
-    __tablename__ = 'pages'
+# --- Enums for Roles ---
+class RoleEnum(enum.Enum):
+    """Enumeration for collaborator roles."""
+    WRITER = "writer"
+    ADMIN = "admin"
+    EDITOR = "editor"
 
-    pageId = db.Column(db.Integer, primary_key=True)
-    pageName = db.Column(db.String(50), nullable=False)
-    categoryId = db.Column(db.Integer, ForeignKey('categories.categoryId'))
-    category = db.relationship('categoriesClass', back_populates='pages')
-    collaboratorId = db.Column(db.Integer, ForeignKey('collaborator.collaboratorId'))
-    collaborator = db.relationship('collaboratorsClass', back_populates='pages')
 
-class rolesClass(db.Model):
+# --- Database Models ---
+class Role(db.Model):
+     
     __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
 
-    roleId = db.Column(db.Integer, primary_key=True)
-    roleName = db.Column(db.String(50), nullable=False)
-    collaborators = db.relationship('collaboratorsClass', back_populates='role')
+    def __repr__(self):
+        return f'<Role {self.name}>'
 
 
-class collaboratorsClass(db.Model):
-    __tablename__ = 'collaborator'
-
-    collaboratorId = db.Column(db.Integer, primary_key=True)
-    collaboratorName = db.Column(db.String(50), nullable=False)
-    collaboratorEmail = db.Column(db.String(50), nullable=False)
-    pages = db.relationship('pagesClass', back_populates='collaborator')
-    roleId = db.Column(db.Integer, ForeignKey('roles.roleId'))
-    role = db.relationship('rolesClass', back_populates='collaborators')
+class Collaborator(db.Model):
+  
+    __tablename__ = 'collaborators'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), nullable=False)
     
+    role = db.relationship('Role', backref=db.backref('collaborators', lazy=True))
 
-#____________________________________________________________________________________________________
+    def set_password(self, password):
+        """Hashes and sets the password."""
+        self.password_hash = generate_password_hash(password)
 
-@app.route('/')
-def hello():
-    return {"hello":"socorro"}
-#____________________________________________________________________________________________________
+    def check_password(self, password):
+        """Checks if the provided password matches the stored hash."""
+        return check_password_hash(self.password_hash, password)
 
-#Categories CRUD
-# Get all categories
-@app.route('/categories', methods=["GET"])
-def getCategoriesFunction():
-    categories = categoriesClass.query.all()
+    def to_dict(self):
+        """Returns a dictionary representation of the collaborator."""
+        return {
+            'id': self.id,
+            'username': self.username,
+            'email': self.email,
+            'role': self.role.name
+        }
 
-    categoriesList = []
-    for category in categories:
-        categoriesList.append({
-            "category_id": category.categoryId,
-            "category_name": category.categoryName
-            })
-    return jsonify(categoriesList), 200
+    def __repr__(self):
+        return f'<Collaborator {self.username}>'
 
-# Create a category
-@app.route('/categories', methods=["POST"])
-def addNewCategoryFunction():
+
+class Category(db.Model):
+   
+    __tablename__ = 'categories'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+
+    def to_dict(self):
+        """Returns a dictionary representation of the category."""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'pages': [page.to_dict_simple() for page in self.pages]
+        }
+
+    def __repr__(self):
+        return f'<Category {self.name}>'
+
+
+class Page(db.Model):
+    
+    __tablename__ = 'pages'
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
+    collaborator_id = db.Column(db.Integer, db.ForeignKey('collaborators.id'), nullable=False)
+
+    category = db.relationship('Category', backref=db.backref('pages', lazy=True, cascade="all, delete-orphan"))
+    author = db.relationship('Collaborator', backref=db.backref('pages', lazy=True))
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'category_id': self.category_id,
+            'category_name': self.category.name,
+            'author_id': self.collaborator_id,
+            'author_username': self.author.username
+        }
+
+    def to_dict_simple(self):
+        return {
+            'id': self.id,
+            'title': self.title
+        }
+
+    def __repr__(self):
+        return f'<Page {self.title}>'
+
+# --- API Endpoints (Routes) ---
+
+
+# --- Collaborator Routes ---
+@app.route('/api/collaborators', methods=['POST'])
+def add_collaborator():
     data = request.get_json()
-    newCategory = categoriesClass(
-        categoryName=data['category_name']
+    if not data or not 'username' in data or not 'password' in data or not 'email' in data or not 'role_name' in data:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    role = Role.query.filter_by(name=data['role_name']).first()
+    if not role:
+        return jsonify({'message': f"Role '{data['role_name']}' not found."}), 404
+        
+    new_collaborator = Collaborator(
+        username=data['username'],
+        email=data['email'],
+        role_id=role.id
     )
-
-    db.session.add(newCategory)
+    new_collaborator.set_password(data['password'])
+    db.session.add(new_collaborator)
     db.session.commit()
+    return jsonify(new_collaborator.to_dict()), 201
 
-    newCategory_data = {
-        "category_id": newCategory.categoryId,
-        "category_name": newCategory.categoryName
-    }
+@app.route('/api/collaborators', methods=['GET'])
+def get_collaborators():
+    collaborators = Collaborator.query.all()
+    return jsonify([c.to_dict() for c in collaborators]), 200
 
-    return jsonify(newCategory_data), 200
-
-
-# Get a specific category 
-@app.route('/categories/<int:categoryId>', methods=["GET"])
-def getCategoryByIdFunction(categoryId: int):
-    category = categoriesClass.query.get_or_404(categoryId)
-
-    category_data = {
-        "category_id": category.categoryId,
-        "category_name": category.categoryName
-    }
-
-    return jsonify(category_data), 200
-
-# "Category" doesn't have a "delete" option
-#____________________________________________________________________________________________________
-
-#Pages CRUD
-# Get all pages
-@app.route('/pages', methods=["GET"])
-def getPagesFunction():
-    pages = pagesClass.query.all()
-
-    pagesList = []
-    for page in pages:
-        pagesList.append({
-            "page_id": page.pageId,
-            "page_name": page.pageName,
-            "page_category": {
-                "category_id": page.category.categoryId,
-                "category_name": page.category.categoryName
-            },
-            "page_collaborator": {
-                "collaborator_id": page.collaborator.collaboratorId,
-                "collaborator_name": page.collaborator.collaboratorName,
-                "collaborator_email": page.collaborator.collaboratorEmail
-            }
-        })
-    return jsonify(pagesList), 200
-
-# Create a new page
-@app.route('/pages/', methods=["POST"])
-def addPageFunction():
+# --- Category Routes ---
+@app.route('/api/categories', methods=['POST'])
+def add_category():
     data = request.get_json()
-    newPage = pagesClass(
-        pageName=data['page_name'],
-        categoryId=data['category_id'],
-        collaboratorId=data['collaborator_id']
-        )
-    db.session.add(newPage)
+    if not data or not 'name' in data:
+        return jsonify({'message': 'Category name is required'}), 400
+    
+    new_category = Category(name=data['name'])
+    db.session.add(new_category)
     db.session.commit()
+    return jsonify(new_category.to_dict()), 201
 
-    return jsonify({
-        "message": "Page added",
-        "page":{
-            "page_id": newPage.pageId,
-            "page_name": newPage.pageName,
-           "page_category": {
-                "category_id": newPage.category.categoryId,
-                "category_name": newPage.category.categoryName
-            },
-            "page_collaborator": {
-                "collaborator_id": newPage.collaborator.collaboratorId,
-                "collaborator_name": newPage.collaborator.collaboratorName,
-                "collaborator_email": newPage.collaborator.collaboratorEmail
-            }
-        }
-    }), 201
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    categories = Category.query.all()
+    return jsonify([c.to_dict() for c in categories]), 200
 
-# Get one page by ID
-@app.route('/pages/<int:pageId>', methods=["GET"])
-def getPageByIdFunction(pageId: int):
-    page = pagesClass.query.get_or_404(pageId)
+@app.route('/api/categories/<int:category_id>', methods=['GET'])
+def get_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    return jsonify(category.to_dict()), 200
+    
+@app.route('/api/categories/<int:category_id>', methods=['DELETE'])
+def delete_category(category_id):
+    category = Category.query.get_or_404(category_id)
+    db.session.delete(category)
+    db.session.commit()
+    return jsonify({'message': 'Category and all its pages have been deleted.'}), 200
 
-    page_data = {
-            "page_id": page.pageId,
-            "page_name": page.pageName,
-            "page_category": {
-                "category_id": page.category.categoryId,
-                "category_name": page.category.categoryName
-            },
-            "page_collaborator": {
-                "collaborator_id": page.collaborator.collaboratorId,
-                "collaborator_name": page.collaborator.collaboratorName,
-                "collaborator_email": page.collaborator.collaboratorEmail
-            }
-        }
-
-    return jsonify(page_data), 200
-
-# Update page
-@app.route('/pages/<int:pageId>', methods=["PUT"])
-def updatePageFunction(pageId: int):
-    page = pagesClass.query.get(pageId)
+# --- Page Routes ---
+@app.route('/api/pages', methods=['POST'])
+def add_page():
     data = request.get_json()
+    if not data or not 'title' in data or not 'content' in data or not 'category_id' in data or not 'collaborator_id' in data:
+        return jsonify({'message': 'Missing required fields'}), 400
 
-    page.pageName = data['page_name']
-    page.categoryId = data['category_id']
-    page.collaboratorId = data['collaborator_id']
-
+    # Verify category and collaborator exist
+    Category.query.get_or_404(data['category_id'])
+    Collaborator.query.get_or_404(data['collaborator_id'])
+    
+    new_page = Page(
+        title=data['title'],
+        content=data['content'],
+        category_id=data['category_id'],
+        collaborator_id=data['collaborator_id']
+    )
+    db.session.add(new_page)
     db.session.commit()
+    return jsonify(new_page.to_dict()), 201
 
-    return jsonify({
-        "message": "Page updated",
-        "page": {
-            "page_id": page.pageId,
-            "page_name": page.pageName,
-             "page_category": {
-                "category_id": page.category.categoryId,
-                "category_name": page.category.categoryName
-            },
-            "page_collaborator": {
-                "collaborator_id": page.collaborator.collaboratorId,
-                "collaborator_name": page.collaborator.collaboratorName,
-                "collaborator_email": page.collaborator.collaboratorEmail
-            }
-        }
-    }), 201
+@app.route('/api/pages', methods=['GET'])
+def get_pages():
+    pages = Page.query.all()
+    return jsonify([p.to_dict() for p in pages]), 200
 
-# Delete a specific page
-@app.route('/page/<int:pageId>', methods=["DELETE"])
-def deletePageFunction(pageId: int):    
-    page = pagesClass.query.get(pageId)
+@app.route('/api/pages/<int:page_id>', methods=['GET'])
+def get_page(page_id):
+    page = Page.query.get_or_404(page_id)
+    return jsonify(page.to_dict()), 200
 
+@app.route('/api/pages/<int:page_id>', methods=['PUT'])
+def update_page(page_id):
+    page = Page.query.get_or_404(page_id)
+    data = request.get_json()
+    
+    page.title = data.get('title', page.title)
+    page.content = data.get('content', page.content)
+    if 'category_id' in data:
+        Category.query.get_or_404(data['category_id'])
+        page.category_id = data['category_id']
+        
+    db.session.commit()
+    return jsonify(page.to_dict()), 200
+
+@app.route('/api/pages/<int:page_id>', methods=['DELETE'])
+def delete_page(page_id):
+    page = Page.query.get_or_404(page_id)
     db.session.delete(page)
     db.session.commit()
+    return jsonify({'message': 'Page deleted successfully.'}), 200
 
-    return jsonify({
-        "message": "Page deleted"
-    }), 200
-#____________________________________________________________________________________________________
 
-#Roles CRUD
-# Get all roles
-@app.route('/roles', methods=["GET"])
-def getRolesFunction():
-    roles = rolesClass.query.all()
-
-    rolesList=[]
-    for role in roles:
-        rolesList.append({
-            "role_id": role.roleId,
-            "role_name": role.roleName,
-            "collaborators_list": role.collaborators
-        })
-    return jsonify(rolesList),200
-
-# Create a new role
-@app.route('/roles/', methods=["POST"])
-def addNewRoleFunction():
-    data = request.get_json()
-    newRole = rolesClass(
-        roleName=data['role_name'],
-    )
-    db.session.add(newRole)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Role added",
-        "role": {
-            "role_id": newRole.roleId,
-            "role_name": newRole.roleName
-        }
-    }), 201
-
-# Get one role by ID
-@app.route('/roles/<int:roleId>', methods=["GET"])
-def getRoleByIdFunction(roleId: int):
-    role = rolesClass.query.get_or_404(roleId)
-
-    role_data = {
-        "role_id": role.roleId,
-        "role_name": role.roleName,
-        "collaborators_list": role.collaborators
-    }
-    return jsonify(role_data), 200
-
-# Update role
-@app.route('/roles/<int:roleId>', methods=["PUT"])
-def updateRoleFunction(roleId: int):
-    role = rolesClass.query.get(roleId)
-    data = request.get_json()
-
-    role.roleName = data['role_name']
-    role.roleId = data['role_id']
-    role.collaborators = data['collaborators']
-
-    db.session.commit()
-
-    return jsonify({
-        "message": "Role updated",
-        "role":{
-            "role_id": role.roleId,
-            "role_name": role.rolename,
-            "collaborators": role.collaborators
-        }
-    }), 201
-
-# Delete a specific role
-@app.route('/role/<int:roleId>', methods=["DELETE"])
-def deleteRoleFunction(roleId: int):
-    role = rolesClass.query.get(roleId)
-
-    db.session.delete(role)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Role deleted"
-    }), 200
-#____________________________________________________________________________________________________
-
-#Collaborators CRUD
-# Get all collaborators users
-@app.route('/collaborators', methods=["GET"])
-def getCollaboratorsFunction():
-    collaborators = collaboratorsClass.query.all()
-
-    collaboratorsList = []
-    for collaborator in collaborators:
-        collaboratorsList.append({
-            "collaborator_id": collaborator.collaboratorId,
-            "collaborator_name": collaborator.collaboratorName,
-            "collaborator_email": collaborator.collaboratorEmail,
-            "collaborator_pages": collaborator.pages,
-            "collaborator_role_id": collaborator.roleId,
-            "collaborator_role": collaborator.role
-        })
+# --- CLI Command to initialize the database ---
+@app.cli.command('init-db')
+def init_db_command():
+    """Clears existing data and creates new tables."""
+    db.drop_all()
+    db.create_all()
     
-    return jsonify(collaboratorsList), 200
-
-# Get a specific collaborator 
-@app.route('/collaborators/<int:collaboratorId>', methods=["GET"])
-def getCollaboratorById(collaboratorId: int):
-    collaborator = collaboratorsClass.query.get_or_404(collaboratorId)
-
-    collaborator_data = {
-        "collaborator_id": collaborator.collaboratorId,
-        "collaborator_name": collaborator.collaboratorName,
-        "collaborator_email": collaborator.collaboratorEmail,
-        "collaborator_role": {
-            "collaborator_role_id": collaborator.role.roleId,
-            "collaborator_role_name": collaborator.role.roleName
-        }
-    }
-
-    return jsonify(collaborator_data), 200
-
-# Create a new collaborator user
-@app.route('/collaborators', methods=["POST"])
-def addCollaborator():
-    data = request.get_json()
-    newCollaborator = collaboratorsClass(
-        collaboratorName=data['collaborator_name'],
-        collaboratorEmail=data['collaborator_email'],
-        roleId=data['collaborator_role_id']
-    )
-    db.session.add(newCollaborator)
+    # --- Seed Initial Data ---
+    # Create roles
+    admin_role = Role(name=RoleEnum.ADMIN.value)
+    writer_role = Role(name=RoleEnum.WRITER.value)
+    editor_role = Role(name=RoleEnum.EDITOR.value)
+    
+    db.session.add_all([admin_role, writer_role, editor_role])
     db.session.commit()
-
-    return jsonify({
-        "message": "Collaborator user added",
-        "collaborator": {
-            "collaborator_id": newCollaborator.collaboratorId,
-            "collaborator_name": newCollaborator.collaboratorName,
-            "collaborator_email": newCollaborator.collaboratorEmail,
-            "collaborator_role": {
-                "collaborator_role_id": newCollaborator.role.roleId,
-                "collaborator_role_name": newCollaborator.role.roleName
-            }
-        }
-    }), 201
-
-
-# Update collaborator
-@app.route('/collaborators/<int:collaboratorId>', methods=["PUT"])
-def updateCollaborator(collaboratorId: int):
-    collaborator = collaboratorsClass.query.get(collaboratorId)
-    data = request.get_json()
-
-    collaborator.collaboratorId=data['collaborator_id']
-    collaborator.collaboratorName=data['collaborator_name']
-    collaborator.collaboratorEmail=data['collaborator_email']
-    collaborator.roleId=data['collaborator_role_id']
-
+    
+    # Create a default admin user
+    admin_user = Collaborator(username='admin', email='admin@example.com', role_id=admin_role.id)
+    admin_user.set_password('supersecret')
+    db.session.add(admin_user)
+    
+    # Create a default writer user
+    writer_user = Collaborator(username='johndoe', email='john.doe@example.com', role_id=writer_role.id)
+    writer_user.set_password('password123')
+    db.session.add(writer_user)
+    
+    # Create some sample categories
+    cat1 = Category(name='Our rhythms')
+    cat2 = Category(name='Classes')
+    db.session.add_all([cat1, cat2])
     db.session.commit()
-
-    return jsonify({
-        "message": "Collaborator updated",
-        "collaborator": {
-            "collaborator_id": collaborator.collaboratorId,
-            "collaborator_name": collaborator.collaboratorName,
-            "collaborator_email": collaborator.collaboratorEmail,
-            "collaborator_role": {
-                "collaborator_role_id": collaborator.roleId,
-                "collaborator_role_name": collaborator.role
-            }
-        }
-    }), 201
-
-# Delete collaborator
-@app.route('/collaborators/<int:collaboratorId>', methods=["DELETE"])
-def deleteCollaborator(collaboratorId):
-    collaborator = collaboratorsClass.query.get(collaboratorId)
-    db.session.delete(collaborator)
+    
+    
     db.session.commit()
+    print('Initialized and seeded the database.')
 
-    return jsonify ({
-        "message": "User deleted"
-    }), 200
-#____________________________________________________________________________________________________
-
-#Relationships routes
-# Pages and categories 
-
-#  Get all pages from a specific category
-@app.route('/categories/<int:categoryId>/pages', methods=["GET"])
-def getPagesByCategory(categoryId: int):
-    category = categoriesClass.query.get(categoryId)
-    pages_data = []
-    for page in category.pages:
-        pages_data.append({
-            "page_id": page.pageId,
-            "page_name": page.pageName,
-            "page_collaborator": {
-                "collaborator_id": page.collaborator.collaboratorId,
-                "collaborator_name": page.collaborator.collaboratorName,
-                "collaborator_email": page.collaborator.collaboratorEmail
-            }
-        })
-
-    return jsonify(pages_data), 200
-
-#____________________________________________________________________________________________________
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+    #    export FLASK_APP=main.py
+    #    flask init-db
+    #    flask run
